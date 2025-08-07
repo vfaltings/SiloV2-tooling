@@ -1,6 +1,20 @@
 [invariant]
 
 [profile.default]
+libs = [
+    'gitmodules',
+    'node_modules',
+]
+out = 'cache/foundry/out'
+evm_version = 'cancun'
+gas_limit = '40000000000'
+optimizer = true
+optimizer_runs = 200
+via_ir = false
+allow_internal_expect_revert = true
+always_use_create_2_factory = true
+
+[profile.core]
 src = 'silo-core/contracts'
 out = 'cache/foundry/out/silo-core'
 broadcast = 'silo-core/broadcast'
@@ -13,20 +27,6 @@ fs_permissions = [
     { access = "read", path = "./silo-core/deploy/silo/_siloDeployments.json"},
     { access = "read", path = "./silo-core/scripts/airdrop/output.json"}
 ]
-
-# [profile.core]
-# src = 'silo-core/contracts'
-# out = 'cache/foundry/out/silo-core'
-# broadcast = 'silo-core/broadcast'
-
-# fs_permissions = [
-#     { access = "read", path = "./cache/foundry/"},
-#     { access = "read", path = "./silo-core/test/foundry/data/"},
-#     { access = "read", path = "./silo-core/deploy/input/"},
-#     { access = "read", path = "./silo-core/deploy/silo/_siloImplementations.json"},
-#     { access = "read", path = "./silo-core/deploy/silo/_siloDeployments.json"},
-#     { access = "read", path = "./silo-core/scripts/airdrop/output.json"}
-# ]
 
 [profile.core_with_test]
 src = 'silo-core/contracts'
