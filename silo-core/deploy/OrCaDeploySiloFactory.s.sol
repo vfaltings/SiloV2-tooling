@@ -84,7 +84,7 @@ contract OrCaDeploySiloFactory is Script {
     IInterestRateModelV2Factory interestRateModelV2ConfigFactory = deployIRMFactory();
 
     // Step 3: deploy SiloDeployer
-    address siloImpl = SILO_MAINNET;
+    address siloImpl = deploySiloImpl(siloFactory);
     (address shareProtectedCollateralTokenImpl, address shareDebtTokenImpl) = deployShareTokenImpls();
 
     ISiloDeployer siloDeployer = deploySiloDeployer(
