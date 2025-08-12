@@ -4,6 +4,8 @@
 src = 'silo-core/contracts'
 out = 'cache/foundry/out/silo-core'
 broadcast = 'silo-core/broadcast'
+optimizer = true
+optimizer_runs = 200
 
 fs_permissions = [
     { access = "read", path = "./cache/foundry/"},
