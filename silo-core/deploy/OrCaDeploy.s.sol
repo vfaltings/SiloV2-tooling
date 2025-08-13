@@ -19,7 +19,7 @@ import {SiloDeployer} from "silo-core/contracts/SiloDeployer.sol";
 import {ISiloConfig} from "silo-core/contracts/interfaces/ISiloConfig.sol";
 import {SiloHookV1} from "silo-core/contracts/hooks/SiloHookV1.sol";
 import {InterestRateModelV2} from "silo-core/contracts/interestRateModel/InterestRateModelV2.sol";
-import {TestToken} from "./TestToken.sol";
+import {TestToken} from "silo-core/contracts/TestToken.sol";
 
 contract OrCaDeploy is Script {
   uint256 internal DEPLOYER_PRIVATE_KEY;
