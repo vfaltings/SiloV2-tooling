@@ -3,7 +3,7 @@
 [profile.default]
 src = 'silo-core/contracts'
 out = 'cache/foundry/out/silo-core'
-broadcast = 'silo-core/broadcast'
+broadcast = './broadcast'
 optimizer = true
 optimizer_runs = 200
 
