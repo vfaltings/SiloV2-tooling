@@ -80,7 +80,7 @@ abstract contract ShareToken is ERC20PermitUpgradeable, IShareToken {
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
-        _disableInitializers();
+        // _disableInitializers();
     }
 
     /// @inheritdoc IShareToken

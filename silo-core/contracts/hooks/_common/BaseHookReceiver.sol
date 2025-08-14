@@ -23,7 +23,7 @@ abstract contract BaseHookReceiver is IHookReceiver, Initializable {
     }
 
     constructor() {
-        _disableInitializers();
+        // _disableInitializers();
     }
 
     /// @inheritdoc IHookReceiver

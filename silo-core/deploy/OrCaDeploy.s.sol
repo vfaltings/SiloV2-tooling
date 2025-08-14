@@ -4,22 +4,30 @@ pragma solidity 0.8.28;
 import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
 
-import {ISiloFactory} from "silo-core/contracts/interfaces/ISiloFactory.sol";
-import {SiloFactory} from "silo-core/contracts/SiloFactory.sol";
 import {
-    IInterestRateModelV2Factory,
-    InterestRateModelV2Factory
+  IInterestRateModelV2Factory, 
+  InterestRateModelV2Factory
 } from "silo-core/contracts/interestRateModel/InterestRateModelV2Factory.sol";
-import {IInterestRateModelV2} from "silo-core/contracts/interfaces/IInterestRateModelV2.sol";
-import {Silo} from "silo-core/contracts/Silo.sol";
-import {ShareProtectedCollateralToken} from "silo-core/contracts/utils/ShareProtectedCollateralToken.sol";
-import {ShareDebtToken} from "silo-core/contracts/utils/ShareDebtToken.sol";
-import {ISiloDeployer} from "silo-core/contracts/interfaces/ISiloDeployer.sol";
-import {SiloDeployer} from "silo-core/contracts/SiloDeployer.sol";
-import {ISiloConfig} from "silo-core/contracts/interfaces/ISiloConfig.sol";
-import {SiloHookV1} from "silo-core/contracts/hooks/SiloHookV1.sol";
 import {InterestRateModelV2} from "silo-core/contracts/interestRateModel/InterestRateModelV2.sol";
+import {ShareDebtToken} from "silo-core/contracts/utils/ShareDebtToken.sol";
+import {ShareProtectedCollateralToken} from "silo-core/contracts/utils/ShareProtectedCollateralToken.sol";
+import {SiloConfig} from "silo-core/contracts/SiloConfig.sol";
+import {SiloDeployer} from "silo-core/contracts/SiloDeployer.sol";
+import {SiloFactory} from "silo-core/contracts/SiloFactory.sol";
+import {SiloHookV1} from "silo-core/contracts/hooks/SiloHookV1.sol";
+import {Silo} from "silo-core/contracts/Silo.sol";
 import {TestToken} from "silo-core/contracts/TestToken.sol";
+import {Views} from "silo-core/contracts/lib/Views.sol";
+
+import {IHookReceiver} from "silo-core/contracts/interfaces/IHookReceiver.sol";
+import {IInterestRateModelV2} from "silo-core/contracts/interfaces/IInterestRateModelV2.sol";
+import {IShareTokenInitializable} from "silo-core/contracts/interfaces/IShareTokenInitializable.sol";
+import {IShareToken} from "silo-core/contracts/interfaces/IShareToken.sol";
+import {ISiloConfig} from "silo-core/contracts/interfaces/ISiloConfig.sol";
+import {ISiloDeployer} from "silo-core/contracts/interfaces/ISiloDeployer.sol";
+import {ISiloFactory} from "silo-core/contracts/interfaces/ISiloFactory.sol";
+import {ISilo} from "silo-core/contracts/interfaces/ISilo.sol";
+
 
 contract OrCaDeploy is Script {
   uint256 internal DEPLOYER_PRIVATE_KEY;
@@ -34,6 +42,24 @@ contract OrCaDeploy is Script {
   address internal constant IRM_MAINNET = 0xA418681A28E3513aA9dc092658E583561AC4E720;
   address internal constant HOOKV1_MAINNET = 0xc51f048279705a9427983DCB2813c06af1dA3f5b;
 
+  // Token types
+  uint24 internal constant PROTECTED_TOKEN = 2 ** 12;
+  uint24 internal constant DEBT_TOKEN = 2 ** 13;
+
+  // Manually deployed contracts
+  ISiloFactory internal siloFactory;
+  IInterestRateModelV2Factory internal irmFactory;
+  address internal hookV1;
+  address internal token0;
+  address internal token1;
+  ISilo internal silo0;
+  ISilo internal silo1;
+  address internal protectedShareToken0;
+  address internal debtShareToken0;
+  address internal protectedShareToken1;
+  address internal debtShareToken1;
+  ISiloConfig internal siloConfig;
+
   constructor() {
     DEPLOYER_PRIVATE_KEY = uint256(vm.envBytes32("PRIVATE_KEY"));
     DEPLOYER_ADDR = vm.addr(DEPLOYER_PRIVATE_KEY);
@@ -43,20 +69,21 @@ contract OrCaDeploy is Script {
     bool reuse = vm.envOr("REUSE_DEPLOYMENTS", false);
     if (reuse) {
       console2.log("Reusing deployments on mainnet");
-      reuseDeployerRun();
+      reuseDeploymentsRun();
     } else {
       console2.log("Deploying all contracts");
       manualRun();
     }
   }
 
-  function reuseDeployerRun() public {
+  function reuseDeploymentsRun() public {
     ISiloDeployer.Oracles memory oracles = noOracles();
     IInterestRateModelV2.Config memory irmConfigData = defaultIRMConfig();
     ISiloDeployer.ClonableHookReceiver memory hookReceiver = defaultHookReceiver(HOOKV1_MAINNET);
     ISiloConfig.InitData memory siloInitData = defaultInitData(
       WSTETH_MAINNET,
       WETH_MAINNET,
+      address(0),
       IRM_MAINNET
     );
 
@@ -77,52 +104,93 @@ contract OrCaDeploy is Script {
     address deployer = vm.addr(deployerPrivateKey);
     console2.log("Deploying with owner:", deployer);
 
-    // Step 1: deploy SiloFactory
-    ISiloFactory siloFactory = deploySiloFactory();
+    // Deploy SiloFactory
+    siloFactory = deploySiloFactory();
 
-    // Step 2: deploy InterestRateModelV2Factory
-    IInterestRateModelV2Factory interestRateModelV2ConfigFactory = deployIRMFactory();
+    // Deploy IRM factory
+    irmFactory = deployIRMFactory();
 
-    // Step 3: deploy SiloDeployer
-    address siloImpl = deploySiloImpl(siloFactory);
-    (address shareProtectedCollateralTokenImpl, address shareDebtTokenImpl) = deployShareTokenImpls();
-
-    ISiloDeployer siloDeployer = deploySiloDeployer(
-      interestRateModelV2ConfigFactory,
-      siloFactory,
-      siloImpl,
-      shareProtectedCollateralTokenImpl,
-      shareDebtTokenImpl
-    );
-
-    // Step 4: deploy Silo
+    // Empty oracles
     ISiloDeployer.Oracles memory oracles = noOracles();
 
-    address irmV2 = deployIRM();
+    // Deploy IRM
     IInterestRateModelV2.Config memory irmConfigData = defaultIRMConfig();
+    bytes32 irmFactorySalt;
+    (, IInterestRateModelV2 interestRateModel) = irmFactory.create(irmConfigData, irmFactorySalt);
 
-    address hookV1 = deployHook();
+    hookV1 = deployHook();
     ISiloDeployer.ClonableHookReceiver memory hookReceiver = defaultHookReceiver(hookV1);
 
-    address token0 = deployTestToken(0);
-    address token1 = deployTestToken(1);
+    // Deploy assets
+    token0 = deployTestToken(0);
+    token1 = deployTestToken(1);
+
+    // Prepare SiloConfig init data
     ISiloConfig.InitData memory siloInitData = defaultInitData(
       token0,
       token1,
-      irmV2
+      address(hookV1),
+      address(interestRateModel)
     );
 
-    vm.startBroadcast(DEPLOYER_PRIVATE_KEY);
-    ISiloConfig siloConfig = siloDeployer.deploy(
-      oracles,
-      irmConfigData,
-      irmConfigData,
-      hookReceiver,
-      siloInitData
-    );
-    vm.stopBroadcast();
+    ISiloConfig.ConfigData memory configData0;
+    ISiloConfig.ConfigData memory configData1;
 
-    console2.log("Deployed SiloConfig:", address(siloConfig));
+    (configData0, configData1) = Views.copySiloConfig(
+      siloInitData,
+      siloFactory.daoFeeRange(),
+      siloFactory.maxDeployerFee(),
+      siloFactory.maxFlashloanFee(),
+      siloFactory.maxLiquidationFee()
+    );
+
+    // Deploy Silos + share tokens
+    silo0 = deploySilo(siloFactory); 
+    silo1 = deploySilo(siloFactory); 
+    protectedShareToken0 = deployProtectedShareToken();
+    debtShareToken0 = deployDebtShareToken();
+    protectedShareToken1 = deployProtectedShareToken();
+    debtShareToken1 = deployDebtShareToken();
+
+    configData0.silo = address(silo0);
+    configData1.silo = address(silo1);
+    configData0.collateralShareToken = configData0.silo;
+    configData1.collateralShareToken = configData1.silo;
+    configData0.protectedShareToken = protectedShareToken0;
+    configData1.protectedShareToken = protectedShareToken1;
+    configData0.debtShareToken = debtShareToken0;
+    configData1.debtShareToken = debtShareToken1;
+
+    // Deploy SiloConfig
+    siloConfig = deploySiloConfig(configData0, configData1);
+
+    // Initialize Silos
+    silo0.initialize(siloConfig);
+    silo1.initialize(siloConfig);
+
+    // Initialize silo0 share tokens
+    address hookReceiver0 = IShareToken(address(silo0)).hookReceiver();
+    (protectedShareToken0, , debtShareToken0) = siloConfig.getShareTokens(address(silo0));
+
+    IShareTokenInitializable(protectedShareToken0).initialize(silo0, hookReceiver0, PROTECTED_TOKEN);
+    IShareTokenInitializable(debtShareToken0).initialize(silo0, hookReceiver0, DEBT_TOKEN);
+
+    // Initialize silo1 share tokens
+    address hookReceiver1 = IShareToken(address(silo1)).hookReceiver();
+    (protectedShareToken1, , debtShareToken1) = siloConfig.getShareTokens(address(silo1));
+
+    IShareTokenInitializable(protectedShareToken1).initialize(silo1, hookReceiver1, PROTECTED_TOKEN);
+    IShareTokenInitializable(debtShareToken1).initialize(silo1, hookReceiver1, DEBT_TOKEN);
+
+    // Update hooks
+    silo0.updateHooks();
+    silo1.updateHooks();
+
+    // Initialize hook receiver 
+    IHookReceiver(hookV1).initialize(
+      siloConfig,
+      hookReceiver.initializationData
+    );
   }
 
   // -------------------- Deployment helpers --------------------
@@ -141,19 +209,24 @@ contract OrCaDeploy is Script {
     console2.log("Deployed InterestRateModelV2Factory:", address(f));
   }
 
-  function deploySiloImpl(ISiloFactory f) internal returns (address s) {
+  function deploySilo(ISiloFactory f) internal returns (ISilo s) {
     vm.startBroadcast(DEPLOYER_PRIVATE_KEY);
-    s = address(new Silo(f));
+    s = ISilo(address(new Silo(f)));
     vm.stopBroadcast();
-    console2.log("Deployed Silo:", s);
+    console2.log("Deployed Silo:", address(s));
   }
 
-  function deployShareTokenImpls() internal returns (address cToken, address dToken) {
+  function deployProtectedShareToken() internal returns (address cToken) {
     vm.startBroadcast(DEPLOYER_PRIVATE_KEY);
     cToken = address(new ShareProtectedCollateralToken());
-    dToken = address(new ShareDebtToken());
     vm.stopBroadcast();
     console2.log("Deployed ShareProtectedCollateralToken:", cToken);
+  }
+
+  function deployDebtShareToken() internal returns (address dToken) {
+    vm.startBroadcast(DEPLOYER_PRIVATE_KEY);
+    dToken = address(new ShareDebtToken());
+    vm.stopBroadcast();
     console2.log("Deployed ShareDebtToken:", dToken);
   }
 
@@ -203,6 +276,16 @@ contract OrCaDeploy is Script {
     console2.log("  Symbol:", symbol);
   }
 
+  function deploySiloConfig(
+    ISiloConfig.ConfigData memory configData0,
+    ISiloConfig.ConfigData memory configData1
+  ) internal returns (ISiloConfig siloConfig) {
+    vm.startBroadcast(DEPLOYER_PRIVATE_KEY);
+    siloConfig = ISiloConfig(address(new SiloConfig(100, configData0, configData1)));
+    vm.stopBroadcast();
+    console2.log("Deployed SiloConfig:", address(siloConfig));
+  }
+
   // -------------------- Struct builders --------------------
 
   function noOracles() internal returns (ISiloDeployer.Oracles memory o) {
@@ -240,11 +323,12 @@ contract OrCaDeploy is Script {
   function defaultInitData(
     address token0,
     address token1,
+    address hook,
     address irm
   ) internal returns (ISiloConfig.InitData memory initData) {
     initData = ISiloConfig.InitData({
       deployer: address(0),
-      hookReceiver: address(0),
+      hookReceiver: hook,
       deployerFee: 0,
       daoFee: 0.15e18,
       token0: token0, 
