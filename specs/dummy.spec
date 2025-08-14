@@ -1,2 +1,2 @@
-vars: SiloConfig c
-spec: []!finished(c.*, False)
+vars: SiloDeployer d
+spec: []!finished(d.*, False)
