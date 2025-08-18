@@ -13,4 +13,11 @@ contract TestToken is ERC20 {
   function burn(address account, uint256 amount) external {
     _burn(account, amount);
   }
+
+  function transferFrom(address from, address to, uint256 value) public override returns (bool) {
+        address spender = _msgSender();
+        // _spendAllowance(from, spender, value);
+        _transfer(from, to, value);
+        return true;
+    }
 }

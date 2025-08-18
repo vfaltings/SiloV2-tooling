@@ -1,2 +1,0 @@
-vars: Silo s
-spec: []!finished(s.deposit(a, r, c), old(s.totalSupply()) > s.totalSupply()))

@@ -1,0 +1,2 @@
+vars: Silo s
+inv: s.totalSupply() = fsum{s.deposit(assets, r, c)}(assets) + fsum{s.mint(shares, r, c)}(shares)
