@@ -165,6 +165,7 @@ contract OrCaDeploy is Script {
     siloConfig = deploySiloConfig(configData0, configData1);
 
     // Initialize Silos
+    vm.startBroadcast(DEPLOYER_PRIVATE_KEY);
     silo0.initialize(siloConfig);
     silo1.initialize(siloConfig);
 
@@ -191,6 +192,7 @@ contract OrCaDeploy is Script {
       siloConfig,
       hookReceiver.initializationData
     );
+    vm.stopBroadcast();
   }
 
   // -------------------- Deployment helpers --------------------
