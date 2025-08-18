@@ -1,2 +1,3 @@
-vars: Silo s
+vars: Silo s, SiloConfig c
+fair: []finished(s.initialize(c))
 spec: []!finished(s.deposit(a, r, c), old(s.totalSupply()) > s.totalSupply())
